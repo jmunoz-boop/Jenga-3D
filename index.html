@@ -1,0 +1,2658 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jenga 3D</title>
+  <meta name="description" content="Juego interactivo de Jenga en 3D con físicas realistas, modo Jugador vs. Máquina (IA) y Ruleta de Desafíos." />
+  <meta property="og:title" content="Jenga 3D" />
+  <meta property="og:description" content="Juego interactivo de Jenga en 3D con físicas realistas, modo Jugador vs. Máquina (IA) y Ruleta de Desafíos." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <!-- Bibliotecas CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #121316;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #f1f2f6;
+      touch-action: none;
+    }
+
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      touch-action: none;
+    }
+
+    /* UI Overlay Layer */
+    .ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px;
+    }
+
+    .interactive {
+      pointer-events: auto;
+    }
+
+    /* Top Navigation Bar */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .brand-card {
+      background: rgba(22, 24, 30, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 12px 18px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #f8fafc;
+    }
+
+    .brand-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #e28743;
+      color: #121316;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 3px;
+    }
+
+    /* Mode Switcher */
+    .mode-switcher {
+      display: inline-flex;
+      background: rgba(15, 17, 21, 0.75);
+      padding: 3px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      margin-top: 6px;
+    }
+
+    .mode-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .mode-btn.active {
+      background: rgba(226, 135, 67, 0.2);
+      color: #f6ad55;
+      border: 1px solid rgba(246, 173, 85, 0.3);
+    }
+
+    /* Turn Status Banner */
+    .turn-banner {
+      background: rgba(22, 24, 30, 0.9);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1.5px solid rgba(246, 173, 85, 0.35);
+      border-radius: 14px;
+      padding: 10px 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 20px rgba(226, 135, 67, 0.12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 280px;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .turn-banner.player-turn {
+      border-color: rgba(52, 211, 153, 0.45);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 25px rgba(52, 211, 153, 0.15);
+    }
+
+    .turn-banner.ai-turn {
+      border-color: rgba(99, 102, 241, 0.45);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 0 0 25px rgba(99, 102, 241, 0.18);
+    }
+
+    .turn-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .turn-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 10px #34d399;
+      animation: pulseDot 1.5s infinite;
+    }
+
+    .turn-banner.ai-turn .turn-dot {
+      background: #818cf8;
+      box-shadow: 0 0 10px #818cf8;
+    }
+
+    @keyframes pulseDot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.35); opacity: 0.65; }
+    }
+
+    .turn-title {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      text-transform: uppercase;
+      color: #f8fafc;
+    }
+
+    .turn-banner.player-turn .turn-title {
+      color: #6ee7b7;
+    }
+
+    .turn-banner.ai-turn .turn-title {
+      color: #a5b4fc;
+    }
+
+    .turn-desc {
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-top: 2px;
+      text-align: center;
+      max-width: 320px;
+    }
+
+    /* Stats Board */
+    .stats-board {
+      display: flex;
+      gap: 10px;
+    }
+
+    .stat-pill {
+      background: rgba(22, 24, 30, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 8px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 78px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #94a3b8;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 800;
+      color: #f8fafc;
+      line-height: 1.1;
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-value.highlight-player {
+      color: #34d399;
+    }
+
+    .stat-value.highlight-ai {
+      color: #818cf8;
+    }
+
+    /* Action Center / Floating Buttons */
+    .top-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      background: rgba(30, 34, 44, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #f1f5f9;
+      padding: 9px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn:hover {
+      background: rgba(45, 52, 68, 0.95);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .btn-primary {
+      background: #e28743;
+      color: #121316;
+      border-color: #f6ad55;
+      font-weight: 700;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #ea9654;
+      border-color: #fbd38d;
+    }
+
+    .btn-icon-only {
+      padding: 9px;
+      width: 38px;
+      height: 38px;
+      justify-content: center;
+    }
+
+    /* ROULETTE CHALLENGE WIDGET */
+    .roulette-panel {
+      position: absolute;
+      top: 85px;
+      right: 20px;
+      width: 250px;
+      background: rgba(22, 24, 30, 0.92);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 12;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    .roulette-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      margin-bottom: 12px;
+    }
+
+    .roulette-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: -0.2px;
+    }
+
+    .roulette-badge {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(226, 135, 67, 0.2);
+      color: #f6ad55;
+      border: 1px solid rgba(246, 173, 85, 0.25);
+    }
+
+    .wheel-stage {
+      position: relative;
+      width: 210px;
+      height: 210px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #wheel-canvas {
+      width: 210px;
+      height: 210px;
+      border-radius: 50%;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Pointer arrow at the top */
+    .wheel-pointer {
+      position: absolute;
+      top: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-top: 16px solid #fbbf24;
+      filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.8));
+      z-index: 5;
+    }
+
+    .wheel-center-cap {
+      position: absolute;
+      width: 44px;
+      height: 44px;
+      background: radial-gradient(circle, #2a2e3b 0%, #15171d 100%);
+      border: 2px solid #fbbf24;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    /* Spin Button */
+    .btn-spin {
+      width: 100%;
+      margin-top: 14px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      border-radius: 11px;
+      justify-content: center;
+      background: linear-gradient(135deg, #e28743 0%, #d97706 100%);
+      color: #121316;
+      border: 1px solid #fbd38d;
+      box-shadow: 0 6px 18px rgba(226, 135, 67, 0.35);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .btn-spin:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 22px rgba(226, 135, 67, 0.5);
+      background: linear-gradient(135deg, #ea9654 0%, #f59e0b 100%);
+    }
+
+    .btn-spin.pulse-spin {
+      animation: spinPulse 1.6s infinite;
+    }
+
+    @keyframes spinPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(246, 173, 85, 0.6); }
+      50% { box-shadow: 0 0 0 9px rgba(246, 173, 85, 0); }
+    }
+
+    /* Challenge Result Card */
+    .challenge-card {
+      width: 100%;
+      margin-top: 12px;
+      background: rgba(14, 16, 20, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .challenge-card.highlight {
+      border-color: rgba(246, 173, 85, 0.5);
+      background: rgba(226, 135, 67, 0.08);
+    }
+
+    .challenge-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .challenge-icon {
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .challenge-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .challenge-desc {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.35;
+    }
+
+    .challenge-hint {
+      font-size: 10px;
+      font-weight: 600;
+      color: #34d399;
+      margin-top: 2px;
+    }
+
+    /* Toast Notification */
+    .game-toast {
+      position: absolute;
+      top: 155px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(18, 20, 26, 0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      color: #fca5a5;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 40;
+    }
+
+    .game-toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .game-toast.success {
+      border-color: rgba(52, 211, 153, 0.5);
+      color: #86efac;
+    }
+
+    /* Bottom HUD */
+    .bottom-hud {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .instructions-card {
+      background: rgba(22, 24, 30, 0.82);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 12px 18px;
+      font-size: 12px;
+      color: #94a3b8;
+      max-width: 460px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+      line-height: 1.5;
+    }
+
+    .instruction-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .instruction-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .instruction-key {
+      background: rgba(255, 255, 255, 0.1);
+      color: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 11px;
+    }
+
+    /* Selection & Top Placement Prompt */
+    .floating-prompt {
+      position: absolute;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(22, 24, 30, 0.95);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(246, 173, 85, 0.4);
+      box-shadow: 0 12px 35px rgba(226, 135, 67, 0.25);
+      border-radius: 12px;
+      padding: 12px 24px;
+      display: none;
+      align-items: center;
+      gap: 16px;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 15;
+    }
+
+    .floating-prompt.visible {
+      display: flex;
+      animation: popIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: translate(-50%, 15px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+
+    /* Game Over Modal */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(10, 11, 14, 0.8);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-backdrop.active {
+      display: flex;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal-card {
+      background: #181a20;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      padding: 32px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+      transform: scale(0.95);
+      animation: modalScale 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    @keyframes modalScale {
+      to { transform: scale(1); }
+    }
+
+    .modal-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+      line-height: 1;
+    }
+
+    .modal-title {
+      font-size: 26px;
+      font-weight: 800;
+      color: #f8fafc;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .modal-description {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .modal-stats {
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 12px;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .modal-stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: #64748b;
+    }
+
+    .modal-stat-value {
+      font-size: 24px;
+      font-weight: 800;
+      color: #f1f5f9;
+      margin-top: 4px;
+    }
+
+    .modal-btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 15px;
+      border-radius: 12px;
+      justify-content: center;
+    }
+
+    /* Force line indicator */
+    #drag-indicator {
+      position: absolute;
+      pointer-events: none;
+      z-index: 5;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- UI Overlay -->
+  <div class="ui-layer">
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="brand-card interactive">
+        <div class="brand-title">
+          <span>Jenga 3D</span>
+          <span class="brand-badge">Física Real</span>
+        </div>
+        <div class="brand-subtitle">Torre clásica con física interactiva</div>
+        <div class="mode-switcher">
+          <button class="mode-btn active" id="btn-mode-vs" title="Jugar contra la IA por turnos con ruleta">⚔️ Jugador vs IA</button>
+          <button class="mode-btn" id="btn-mode-free" title="Modo libre sin turnos para practicar">🎯 Modo Libre</button>
+        </div>
+      </div>
+
+      <!-- Centered Turn Indicator -->
+      <div class="turn-banner player-turn interactive" id="turn-banner">
+        <div class="turn-header">
+          <span class="turn-dot" id="turn-dot"></span>
+          <span class="turn-title" id="turn-title">Tu Turno</span>
+        </div>
+        <div class="turn-desc" id="turn-desc">Gira la ruleta de desafíos para comenzar tu turno</div>
+      </div>
+
+      <!-- Scoreboard: Jugador vs IA -->
+      <div class="stats-board interactive">
+        <div class="stat-pill" title="Bloques extraídos por el jugador">
+          <span class="stat-label">Tú</span>
+          <span class="stat-value highlight-player" id="player-score">0</span>
+        </div>
+        <div class="stat-pill" title="Bloques extraídos por la IA">
+          <span class="stat-label">IA</span>
+          <span class="stat-value highlight-ai" id="ai-score">0</span>
+        </div>
+        <div class="stat-pill" title="Piso más alto actual de la torre">
+          <span class="stat-label">Piso Cima</span>
+          <span class="stat-value" id="level-counter">18</span>
+        </div>
+      </div>
+
+      <div class="top-actions interactive">
+        <button class="btn btn-primary" id="btn-restart" title="Reiniciar y reconstruir la torre">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          <span>Reiniciar</span>
+        </button>
+        <button class="btn btn-icon-only" id="btn-camera" title="Restablecer cámara">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+        <button class="btn btn-icon-only" id="btn-audio" title="Activar/Desactivar sonido">
+          <svg id="icon-sound-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <svg id="icon-sound-off" style="display:none;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ROULETTE CHALLENGE PANEL -->
+    <div class="roulette-panel interactive" id="roulette-panel">
+      <div class="roulette-header">
+        <div class="roulette-title">
+          <span>🎲 Ruleta de Desafíos</span>
+        </div>
+        <span class="roulette-badge" id="roulette-status-badge">Listo</span>
+      </div>
+
+      <div class="wheel-stage">
+        <div class="wheel-pointer"></div>
+        <canvas id="wheel-canvas" width="420" height="420"></canvas>
+        <div class="wheel-center-cap">🎯</div>
+      </div>
+
+      <button class="btn btn-spin pulse-spin" id="btn-spin-wheel">
+        <span>Girar Ruleta</span>
+      </button>
+
+      <div class="challenge-card" id="challenge-card">
+        <div class="challenge-top">
+          <span class="challenge-icon" id="challenge-icon">🎲</span>
+          <span class="challenge-name" id="challenge-name">Gira la Ruleta</span>
+        </div>
+        <div class="challenge-desc" id="challenge-desc">
+          La ruleta seleccionará qué bloque debes extraer.
+        </div>
+        <div class="challenge-hint" id="challenge-hint">Esperando giro...</div>
+      </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div class="game-toast" id="game-toast">⚠️ Mensaje de juego</div>
+
+    <!-- Floating Prompt for Extracted Block -->
+    <div class="floating-prompt interactive" id="place-prompt">
+      <div style="font-size:13px; font-weight:600; color:#f8fafc;" id="place-prompt-text">
+        Bloque retirado de la torre
+      </div>
+      <button class="btn btn-primary" id="btn-place-top">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        <span>Colocar en la Cima</span>
+      </button>
+    </div>
+
+    <!-- Bottom Controls & Hints -->
+    <footer class="bottom-hud">
+      <div class="instructions-card interactive">
+        <div class="instruction-row">
+          <span class="instruction-key" style="background: rgba(226, 135, 67, 0.25); color: #f6ad55; border: 1px solid rgba(246, 173, 85, 0.4);">Clic Izquierdo</span>
+          <span>Sujetar y arrastrar pieza (Física Real) / Rotar cámara</span>
+        </div>
+        <div class="instruction-row">
+          <span class="instruction-key">Rueda Ratón</span>
+          <span>Acercar / alejar vista (Zoom)</span>
+        </div>
+        <div class="instruction-row">
+          <span class="instruction-key">Clic Derecho</span>
+          <span>Desplazar vista panorámica (Pan)</span>
+        </div>
+      </div>
+
+      <div class="interactive" id="active-block-info" style="display:none; background:rgba(22,24,30,0.88); backdrop-filter:blur(12px); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px 16px; font-size:12px; color:#cbd5e1;">
+        Sujetando: <strong id="block-info-text" style="color:#f6ad55;">Piso 5</strong>
+        <span id="block-eligibility-badge" style="margin-left:8px; font-weight:700;"></span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Modal Game Over / Colapso con Ganador -->
+  <div class="modal-backdrop" id="collapse-modal">
+    <div class="modal-card">
+      <div class="modal-icon" id="modal-winner-icon">🏆</div>
+      <h2 class="modal-title" id="modal-winner-title">¡Felicidades, Ganaste!</h2>
+      <p class="modal-description" id="modal-winner-desc">
+        La máquina ha derribado la torre durante su extracción. ¡Has ganado la partida!
+      </p>
+
+      <div class="modal-stats">
+        <div>
+          <div class="modal-stat-label">Tus Bloques</div>
+          <div class="modal-stat-value" id="modal-player-score" style="color:#34d399;">0</div>
+        </div>
+        <div>
+          <div class="modal-stat-label">Bloques IA</div>
+          <div class="modal-stat-value" id="modal-ai-score" style="color:#818cf8;">0</div>
+        </div>
+        <div>
+          <div class="modal-stat-label">Pisos Alcanzados</div>
+          <div class="modal-stat-value" id="final-levels">18</div>
+        </div>
+        <div>
+          <div class="modal-stat-label">Total Extraídos</div>
+          <div class="modal-stat-value" id="final-total-score">0</div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary modal-btn" id="btn-modal-restart">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        <span>Revancha / Reconstruir Torre</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Sound Synthesizer & Game Engine Script -->
+  <script>
+    // ==========================================
+    // 1. SOUND SYNTHESIZER (Web Audio API)
+    // ==========================================
+    class SoundFX {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            this.ctx = new AudioContext();
+          }
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      playWoodClick(intensity = 1.0) {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const clampedIntensity = Math.min(Math.max(intensity, 0.1), 1.5);
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        const filter = this.ctx.createBiquadFilter();
+
+        // Realistic resonant wood click
+        osc.type = 'triangle';
+        const baseFreq = 700 + Math.random() * 300;
+        osc.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(180, this.ctx.currentTime + 0.04);
+
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
+        filter.Q.setValueAtTime(4.0, this.ctx.currentTime);
+
+        const vol = 0.35 * clampedIntensity;
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.045);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+      }
+
+      playHeavyThud() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(35, this.ctx.currentTime + 0.18);
+
+        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.22);
+      }
+
+      playSuccess() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+        notes.forEach((freq, idx) => {
+          setTimeout(() => {
+            if (!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.16);
+          }, idx * 60);
+        });
+      }
+
+      playWheelTick() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1100 + Math.random() * 200, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.015);
+
+        gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.02);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.022);
+      }
+
+      playWheelChime() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const notes = [587.33, 739.99, 880.0, 1174.66]; // D5, F#5, A5, D6
+        notes.forEach((freq, idx) => {
+          setTimeout(() => {
+            if (!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+            gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.28);
+          }, idx * 50);
+        });
+      }
+
+      playWarning() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(160, this.ctx.currentTime + 0.12);
+
+        gain.gain.setValueAtTime(0.18, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.14);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.15);
+      }
+
+      playCollapse() {
+        if (this.muted) return;
+        this.init();
+        if (!this.ctx) return;
+
+        for (let i = 0; i < 8; i++) {
+          setTimeout(() => {
+            this.playWoodClick(1.2);
+            if (i % 2 === 0) this.playHeavyThud();
+          }, i * 45 + Math.random() * 20);
+        }
+      }
+    }
+
+    const sound = new SoundFX();
+
+    // ==========================================
+    // 2. PROCEDURAL WOOD TEXTURE GENERATION
+    // ==========================================
+    function createWoodTextures() {
+      // Side Grain Canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+
+      // Base wood gradient
+      const grad = ctx.createLinearGradient(0, 0, 0, 128);
+      grad.addColorStop(0, '#dfb782');
+      grad.addColorStop(0.3, '#d3a56f');
+      grad.addColorStop(0.7, '#c99860');
+      grad.addColorStop(1, '#d8ad77');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 512, 128);
+
+      // Longitudinal wood grain fibers
+      for (let i = 0; i < 90; i++) {
+        const y = Math.random() * 128;
+        const alpha = 0.05 + Math.random() * 0.12;
+        ctx.strokeStyle = Math.random() > 0.4 ? `rgba(130, 85, 42, ${alpha})` : `rgba(255, 235, 190, ${alpha * 0.8})`;
+        ctx.lineWidth = 0.8 + Math.random() * 2.2;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        const cp1x = 130 + Math.random() * 50;
+        const cp1y = y + (Math.random() - 0.5) * 8;
+        const cp2x = 350 + Math.random() * 50;
+        const cp2y = y + (Math.random() - 0.5) * 8;
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, 512, y + (Math.random() - 0.5) * 6);
+        ctx.stroke();
+      }
+
+      // Subtle knots / grain variations
+      for (let k = 0; k < 2; k++) {
+        const kx = 100 + Math.random() * 300;
+        const ky = 30 + Math.random() * 70;
+        for (let r = 1; r < 20; r += 3) {
+          ctx.strokeStyle = `rgba(110, 68, 30, ${0.12 - r * 0.005})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.ellipse(kx, ky, r * 2.5, r, 0.1, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      // Bump / normal texture
+      const bumpCanvas = document.createElement('canvas');
+      bumpCanvas.width = 256;
+      bumpCanvas.height = 64;
+      const bCtx = bumpCanvas.getContext('2d');
+      bCtx.fillStyle = '#808080';
+      bCtx.fillRect(0, 0, 256, 64);
+      for (let i = 0; i < 60; i++) {
+        const y = Math.random() * 64;
+        bCtx.strokeStyle = Math.random() > 0.5 ? '#a0a0a0' : '#505050';
+        bCtx.lineWidth = 1;
+        bCtx.beginPath();
+        bCtx.moveTo(0, y);
+        bCtx.lineTo(256, y + (Math.random() - 0.5) * 4);
+        bCtx.stroke();
+      }
+
+      // Tabletop circular parquet texture
+      const tableCanvas = document.createElement('canvas');
+      tableCanvas.width = 512;
+      tableCanvas.height = 512;
+      const tCtx = tableCanvas.getContext('2d');
+      const tGrad = tCtx.createRadialGradient(256, 256, 50, 256, 256, 256);
+      tGrad.addColorStop(0, '#2e2722');
+      tGrad.addColorStop(0.85, '#1e1a17');
+      tGrad.addColorStop(1, '#151210');
+      tCtx.fillStyle = tGrad;
+      tCtx.fillRect(0, 0, 512, 512);
+
+      // Fine table rings
+      for (let r = 10; r < 250; r += 12) {
+        tCtx.strokeStyle = 'rgba(255, 220, 180, 0.025)';
+        tCtx.lineWidth = 1.5;
+        tCtx.beginPath();
+        tCtx.arc(256, 256, r, 0, Math.PI * 2);
+        tCtx.stroke();
+      }
+
+      const woodTex = new THREE.CanvasTexture(canvas);
+      woodTex.wrapS = THREE.RepeatWrapping;
+      woodTex.wrapT = THREE.RepeatWrapping;
+
+      const bumpTex = new THREE.CanvasTexture(bumpCanvas);
+      bumpTex.wrapS = THREE.RepeatWrapping;
+      bumpTex.wrapT = THREE.RepeatWrapping;
+
+      const tableTex = new THREE.CanvasTexture(tableCanvas);
+
+      return { woodTex, bumpTex, tableTex };
+    }
+
+    // ==========================================
+    // 3. GAME CONSTANTS & STATE (PLAYER vs AI & ROULETTE)
+    // ==========================================
+    const BLOCK_W = 0.96; // Ancho
+    const BLOCK_H = 0.58; // Alto
+    const BLOCK_L = 2.94; // Largo (aprox 3 x Ancho + holgura)
+    const LEVEL_HEIGHT = 0.58; // Altura exacta por piso para contacto raso sin holguras
+    const INITIAL_LEVELS = 18;
+
+    // Challenge Roulette Definition (6 challenges)
+    const CHALLENGES = [
+      {
+        id: 'LEFT',
+        name: 'Bloque Izquierdo',
+        short: 'Izquierdo',
+        icon: '⬅️',
+        color: '#e28743',
+        textColor: '#121316',
+        description: 'Extrae un bloque del lateral izquierdo (posición 1) de cualquier piso.',
+        filter: (b) => b.slotIndex === 0
+      },
+      {
+        id: 'CENTER',
+        name: 'Bloque Central',
+        short: 'Central',
+        icon: '🎯',
+        color: '#2563eb',
+        textColor: '#ffffff',
+        description: 'Extrae un bloque del centro (posición 2) de cualquier piso.',
+        filter: (b) => b.slotIndex === 1
+      },
+      {
+        id: 'RIGHT',
+        name: 'Bloque Derecho',
+        short: 'Derecho',
+        icon: '➡️',
+        color: '#059669',
+        textColor: '#ffffff',
+        description: 'Extrae un bloque del lateral derecho (posición 3) de cualquier piso.',
+        filter: (b) => b.slotIndex === 2
+      },
+      {
+        id: 'BOTTOM',
+        name: 'Piso Inferior',
+        short: 'Piso Bajo',
+        icon: '🔽',
+        color: '#d97706',
+        textColor: '#121316',
+        description: 'Extrae cualquier bloque de los pisos inferiores (pisos 1 al 6).',
+        filter: (b) => b.initialLevel < 6
+      },
+      {
+        id: 'MIDDLE',
+        name: 'Piso Medio',
+        short: 'Piso Medio',
+        icon: '⏸️',
+        color: '#7c3aed',
+        textColor: '#ffffff',
+        description: 'Extrae cualquier bloque de los pisos intermedios (pisos 7 al 12).',
+        filter: (b) => b.initialLevel >= 6 && b.initialLevel < 12
+      },
+      {
+        id: 'TOP',
+        name: 'Piso Superior',
+        short: 'Piso Alto',
+        icon: '🔼',
+        color: '#db2777',
+        textColor: '#ffffff',
+        description: 'Extrae un bloque de los pisos superiores (pisos 13 al 17).',
+        filter: (b) => b.initialLevel >= 12
+      }
+    ];
+
+    let scene, camera, renderer, orbitControls;
+    let world;
+    let woodPhysMaterial, tablePhysMaterial;
+    let textures;
+
+    // Game variables
+    let blocks = []; // Array of { mesh, body, initialLevel, slotIndex, extracted, placedOnTop, isRotated90 }
+    let currentTopLevel = INITIAL_LEVELS; // level index for placement
+    let currentTopSlot = 0; // 0, 1, 2 in top layer
+    let isGameOver = false;
+    let selectedBlock = null;
+    let draggedBlock = null;
+    let hoveredBlock = null;
+
+    // Turn & Challenge State
+    let gameMode = 'VS_AI'; // 'VS_AI' | 'FREE'
+    let currentTurn = 'PLAYER'; // 'PLAYER' | 'AI'
+    let turnPhase = 'WAITING_SPIN'; // 'WAITING_SPIN' | 'SPINNING' | 'AWAITING_PULL' | 'PLACING' | 'AI_PLAYING'
+    let activeChallenge = null;
+    let playerScore = 0;
+    let aiScore = 0;
+
+    // Interaction variables
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let isMouseDown = false;
+    let mouseBody = null;
+    let mouseConstraint = null;
+    let dragPlane = new THREE.Plane();
+    let dragPlaneIntersect = new THREE.Vector3();
+    let dragOffset = new THREE.Vector3();
+    let dragTargetPoint = new THREE.Vector3();
+    let dragAnchorLocal = new THREE.Vector3();
+
+    // DOM Elements
+    const btnModeVs = document.getElementById('btn-mode-vs');
+    const btnModeFree = document.getElementById('btn-mode-free');
+    const turnBannerEl = document.getElementById('turn-banner');
+    const turnDotEl = document.getElementById('turn-dot');
+    const turnTitleEl = document.getElementById('turn-title');
+    const turnDescEl = document.getElementById('turn-desc');
+    const playerScoreEl = document.getElementById('player-score');
+    const aiScoreEl = document.getElementById('ai-score');
+    const levelCounterEl = document.getElementById('level-counter');
+
+    const roulettePanelEl = document.getElementById('roulette-panel');
+    const rouletteStatusBadge = document.getElementById('roulette-status-badge');
+    const wheelCanvas = document.getElementById('wheel-canvas');
+    const wheelCtx = wheelCanvas ? wheelCanvas.getContext('2d') : null;
+    const btnSpinWheel = document.getElementById('btn-spin-wheel');
+    const challengeCardEl = document.getElementById('challenge-card');
+    const challengeIconEl = document.getElementById('challenge-icon');
+    const challengeNameEl = document.getElementById('challenge-name');
+    const challengeDescEl = document.getElementById('challenge-desc');
+    const challengeHintEl = document.getElementById('challenge-hint');
+
+    const gameToastEl = document.getElementById('game-toast');
+    let toastTimeout = null;
+
+    const placePromptEl = document.getElementById('place-prompt');
+    const placePromptText = document.getElementById('place-prompt-text');
+    const btnPlaceTop = document.getElementById('btn-place-top');
+    const btnRestart = document.getElementById('btn-restart');
+    const btnCamera = document.getElementById('btn-camera');
+    const btnAudio = document.getElementById('btn-audio');
+    const iconSoundOn = document.getElementById('icon-sound-on');
+    const iconSoundOff = document.getElementById('icon-sound-off');
+
+    const collapseModal = document.getElementById('collapse-modal');
+    const modalWinnerIcon = document.getElementById('modal-winner-icon');
+    const modalWinnerTitle = document.getElementById('modal-winner-title');
+    const modalWinnerDesc = document.getElementById('modal-winner-desc');
+    const modalPlayerScore = document.getElementById('modal-player-score');
+    const modalAiScore = document.getElementById('modal-ai-score');
+    const finalLevelsEl = document.getElementById('final-levels');
+    const finalTotalScore = document.getElementById('final-total-score');
+    const btnModalRestart = document.getElementById('btn-modal-restart');
+
+    const activeBlockInfoEl = document.getElementById('active-block-info');
+    const blockInfoTextEl = document.getElementById('block-info-text');
+    const blockEligibilityBadge = document.getElementById('block-eligibility-badge');
+
+    // Roulette wheel state
+    let wheelRotation = 0;
+    let isWheelSpinning = false;
+
+    // ==========================================
+    // 4. THREE.JS & CANNON.JS INITIALIZATION
+    // ==========================================
+    function initPhysics() {
+      world = new CANNON.World();
+      world.allowSleep = true; // Activar modo reposo en el motor físico
+      world.gravity.set(0, -9.82, 0);
+      world.broadphase = new CANNON.SAPBroadphase(world);
+      world.solver.iterations = 35; // Alta precisión de iteraciones para evitar desajustes
+      world.solver.tolerance = 0.0001;
+
+      woodPhysMaterial = new CANNON.Material('wood');
+      tablePhysMaterial = new CANNON.Material('table');
+
+      // Contacto madera con madera: alta fricción y cero rebote para eliminar microvibraciones
+      const woodWoodContact = new CANNON.ContactMaterial(woodPhysMaterial, woodPhysMaterial, {
+        friction: 0.85, // Fricción aumentada para agarre firme y estable
+        restitution: 0.0, // Cero elasticidad/rebote
+        contactEquationStiffness: 1e8,
+        contactEquationRelaxation: 3,
+        frictionEquationStiffness: 1e8,
+        frictionEquationRelaxation: 3
+      });
+
+      // Contacto base/mesa con madera: soporte rígido antideslizante
+      const woodTableContact = new CANNON.ContactMaterial(tablePhysMaterial, woodPhysMaterial, {
+        friction: 0.95,
+        restitution: 0.0,
+        contactEquationStiffness: 1e8,
+        contactEquationRelaxation: 3
+      });
+
+      world.addContactMaterial(woodWoodContact);
+      world.addContactMaterial(woodTableContact);
+
+      // Parámetros por defecto para cualquier contacto adicional
+      world.defaultContactMaterial.friction = 0.85;
+      world.defaultContactMaterial.restitution = 0.0;
+      world.defaultContactMaterial.contactEquationStiffness = 1e8;
+      world.defaultContactMaterial.contactEquationRelaxation = 3;
+
+      // Table top collision plane (at Y = 0)
+      const groundShape = new CANNON.Plane();
+      const groundBody = new CANNON.Body({ mass: 0, material: tablePhysMaterial });
+      groundBody.addShape(groundShape);
+      groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+      world.addBody(groundBody);
+
+      // Cuerpo cinemático invisible para arrastre físico mediante PointToPointConstraint
+      mouseBody = new CANNON.Body({
+        mass: 0,
+        type: CANNON.Body.KINEMATIC,
+        collisionFilterGroup: 0,
+        collisionFilterMask: 0
+      });
+      world.addBody(mouseBody);
+
+      // Collision sound listener
+      world.addEventListener('postStep', () => {
+        // Handled per step if significant impact happens
+      });
+    }
+
+    function initGraphics() {
+      const container = document.getElementById('canvas-container');
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x131418);
+      scene.fog = new THREE.FogExp2(0x131418, 0.018);
+
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+      resetCameraView();
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+      orbitControls.enableDamping = true;
+      orbitControls.dampingFactor = 0.06;
+      orbitControls.maxPolarAngle = Math.PI / 2 - 0.02; // Don't dip below the table
+      orbitControls.minDistance = 5;
+      orbitControls.maxDistance = 35;
+      orbitControls.target.set(0, 5.5, 0);
+
+      // Asignación de controles de ratón:
+      // - Clic Izquierdo en espacio vacío: Rotar cámara 360°
+      // - Clic Izquierdo sobre bloque: El raycaster desactiva temporalmente OrbitControls para arrastre físico
+      // - Clic Central / Rueda: Zoom (Dolly)
+      // - Clic Derecho: Desplazar cámara (Pan)
+      orbitControls.mouseButtons = {
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN
+      };
+
+      // Generate procedural textures
+      textures = createWoodTextures();
+
+      // Lighting Setup
+      const ambientLight = new THREE.AmbientLight(0xfff3e6, 0.65);
+      scene.add(ambientLight);
+
+      // Primary Key Light with Soft Shadows
+      const dirLight = new THREE.DirectionalLight(0xfff9f0, 0.95);
+      dirLight.position.set(10, 22, 12);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 1;
+      dirLight.shadow.camera.far = 45;
+      const d = 8.5;
+      dirLight.shadow.camera.left = -d;
+      dirLight.shadow.camera.right = d;
+      dirLight.shadow.camera.top = 16;
+      dirLight.shadow.camera.bottom = -2;
+      dirLight.shadow.bias = -0.0004;
+      scene.add(dirLight);
+
+      // Soft Cool Fill Light
+      const fillLight = new THREE.DirectionalLight(0xb0c8e8, 0.35);
+      fillLight.position.set(-12, 14, -10);
+      scene.add(fillLight);
+
+      // Warm Subtle Rim Light
+      const rimLight = new THREE.PointLight(0xffb070, 0.5, 30);
+      rimLight.position.set(0, -1, 0);
+      scene.add(rimLight);
+
+      // Wooden Table Mesh
+      createTableMesh();
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    function createTableMesh() {
+      // Pedestal / Tabletop
+      const tableRadius = 14;
+      const tableHeight = 0.8;
+      const tableGeo = new THREE.CylinderGeometry(tableRadius, tableRadius + 0.3, tableHeight, 64);
+      const tableMat = new THREE.MeshStandardMaterial({
+        map: textures.tableTex,
+        roughness: 0.55,
+        metalness: 0.1
+      });
+      const tableMesh = new THREE.Mesh(tableGeo, tableMat);
+      tableMesh.position.y = -tableHeight / 2;
+      tableMesh.receiveShadow = true;
+      scene.add(tableMesh);
+
+      // Outer golden-brass decorative rim
+      const rimGeo = new THREE.TorusGeometry(tableRadius + 0.05, 0.08, 16, 64);
+      const rimMat = new THREE.MeshStandardMaterial({
+        color: 0xc8964d,
+        metalness: 0.8,
+        roughness: 0.3
+      });
+      const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+      rimMesh.rotation.x = Math.PI / 2;
+      rimMesh.position.y = 0;
+      scene.add(rimMesh);
+
+      // Soft circular target mat for the tower base
+      const matGeo = new THREE.CircleGeometry(2.4, 48);
+      const matMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1f222b,
+        roughness: 0.9,
+        metalness: 0.0
+      });
+      const matMesh = new THREE.Mesh(matGeo, matMaterial);
+      matMesh.rotation.x = -Math.PI / 2;
+      matMesh.position.y = 0.002;
+      matMesh.receiveShadow = true;
+      scene.add(matMesh);
+    }
+
+    function resetCameraView() {
+      camera.position.set(13, 14, 15);
+      if (orbitControls) {
+        orbitControls.target.set(0, 5.5, 0);
+        orbitControls.update();
+      }
+    }
+
+    // ==========================================
+    // 5. JENGA TOWER CREATION & MANAGEMENT
+    // ==========================================
+    const blockGeometry = new THREE.BoxGeometry(BLOCK_W, BLOCK_H, BLOCK_L);
+    const blockShape = new CANNON.Box(new CANNON.Vec3(BLOCK_W / 2, BLOCK_H / 2, BLOCK_L / 2));
+
+    function createBlockMesh() {
+      // Slight individual tone variation for natural wood diversity
+      const lightnessShift = (Math.random() - 0.5) * 0.06;
+      const blockColor = new THREE.Color(0xd7aa76).offsetHSL(0, (Math.random() - 0.5) * 0.04, lightnessShift);
+
+      const material = new THREE.MeshStandardMaterial({
+        color: blockColor,
+        map: textures.woodTex,
+        bumpMap: textures.bumpTex,
+        bumpScale: 0.015,
+        roughness: 0.55 + Math.random() * 0.1,
+        metalness: 0.02,
+        emissive: new THREE.Color(0x000000)
+      });
+
+      const mesh = new THREE.Mesh(blockGeometry, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      return mesh;
+    }
+
+    function createBlockBody(x, y, z, isRotated90) {
+      const body = new CANNON.Body({
+        mass: 0.45, // realistic block mass (kg)
+        material: woodPhysMaterial,
+        linearDamping: 0.35, // Alta amortiguación para eliminar microvibraciones
+        angularDamping: 0.40, // Amortiguación angular para estabilidad
+        allowSleep: true,    // Habilitar estado de reposo individual
+        sleepSpeedLimit: 0.1, // Velocidad límite para entrar en reposo
+        sleepTimeLimit: 0.25  // Tiempo requerido para consolidar reposo (s)
+      });
+
+      body.addShape(blockShape);
+      body.position.set(x, y, z);
+
+      if (isRotated90) {
+        // Nivel par: rotado 90 grados alrededor del eje Y
+        body.quaternion.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI / 2);
+      } else {
+        // Nivel impar: 0 grados
+        body.quaternion.set(0, 0, 0, 1);
+      }
+
+      // Bloques completamente inmóviles al inicio
+      body.sleep();
+
+      // Sound on collision with other bodies
+      body.addEventListener('collide', (e) => {
+        const relVel = e.contact.getImpactVelocityAlongNormal();
+        if (relVel > 0.8 && !isGameOver) {
+          sound.playWoodClick(Math.min(relVel * 0.35, 1.2));
+        }
+      });
+
+      return body;
+    }
+
+    // Despierta los bloques de física cuando el jugador o la IA interactúan con ellos
+    function wakeBlocksAround(block) {
+      if (!block) return;
+      block.body.wakeUp();
+      const lvl = block.initialLevel;
+      for (let i = 0; i < blocks.length; i++) {
+        const b = blocks[i];
+        if (!b.extracted) {
+          // Despertar pisos adyacentes y superiores para responder con gravedad realista
+          if (Math.abs(b.initialLevel - lvl) <= 3 || b.initialLevel > lvl) {
+            b.body.wakeUp();
+          }
+        }
+      }
+    }
+
+    function buildTower() {
+      // Remove any active mouse constraint
+      if (mouseConstraint) {
+        world.removeConstraint(mouseConstraint);
+        mouseConstraint = null;
+      }
+      if (orbitControls) orbitControls.enabled = true;
+      isMouseDown = false;
+
+      // Clear existing blocks
+      blocks.forEach(b => {
+        scene.remove(b.mesh);
+        b.mesh.geometry.dispose();
+        b.mesh.material.dispose();
+        world.removeBody(b.body);
+      });
+      blocks = [];
+      playerScore = 0;
+      aiScore = 0;
+      currentTopLevel = INITIAL_LEVELS;
+      currentTopSlot = 0;
+      isGameOver = false;
+      selectedBlock = null;
+      draggedBlock = null;
+      hoveredBlock = null;
+
+      playerScoreEl.textContent = '0';
+      aiScoreEl.textContent = '0';
+      levelCounterEl.textContent = INITIAL_LEVELS.toString();
+      placePromptEl.classList.remove('visible');
+      collapseModal.classList.remove('active');
+      activeBlockInfoEl.style.display = 'none';
+
+      const spacingGap = 0.02;
+
+      for (let level = 0; level < INITIAL_LEVELS; level++) {
+        // Nivel 1 (level=0, impar) -> 0 grados
+        // Nivel 2 (level=1, par) -> 90 grados rotado respecto al inferior
+        const isRotated90 = ((level + 1) % 2 === 0);
+        const y = (BLOCK_H / 2) + level * LEVEL_HEIGHT;
+
+        for (let j = 0; j < 3; j++) {
+          const offset = (j - 1) * (BLOCK_W + spacingGap);
+          let x = 0, z = 0;
+
+          if (isRotated90) {
+            // Nivel par (90°): orientados a lo largo del eje X, 3 bloques separados en Z
+            x = 0;
+            z = offset;
+          } else {
+            // Nivel impar (0°): orientados a lo largo del eje Z, 3 bloques separados en X
+            x = offset;
+            z = 0;
+          }
+
+          const mesh = createBlockMesh();
+          const body = createBlockBody(x, y, z, isRotated90);
+
+          scene.add(mesh);
+          world.addBody(body);
+
+          mesh.position.copy(body.position);
+          mesh.quaternion.copy(body.quaternion);
+
+          blocks.push({
+            id: `b_${level}_${j}`,
+            mesh,
+            body,
+            initialLevel: level,
+            slotIndex: j, // 0: Izquierdo, 1: Central, 2: Derecho
+            extracted: false,
+            placedOnTop: false,
+            isRotated90: isRotated90,
+            lastY: y
+          });
+        }
+      }
+
+      // Asegurar estado de reposo absoluto al inicio de la partida
+      blocks.forEach(b => {
+        b.body.velocity.set(0, 0, 0);
+        b.body.angularVelocity.set(0, 0, 0);
+        b.body.sleep();
+      });
+
+      // Smooth camera sweep focus
+      resetCameraView();
+
+      // Initialize game turns & roulette
+      initTurnState();
+      drawRouletteWheel(wheelRotation);
+    }
+
+    // ==========================================
+    // 6. ROULETTE & CHALLENGE ENGINE
+    // ==========================================
+    function showGameToast(msg, isSuccess = false) {
+      if (!gameToastEl) return;
+      gameToastEl.textContent = msg;
+      if (isSuccess) {
+        gameToastEl.classList.add('success');
+      } else {
+        gameToastEl.classList.remove('success');
+      }
+      gameToastEl.classList.add('visible');
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        gameToastEl.classList.remove('visible');
+      }, 2600);
+    }
+
+    function resetChallengeCard(title = 'Gira la Ruleta', desc = 'Descubre qué tipo de bloque deberás extraer en este turno.') {
+      challengeIconEl.textContent = '🎲';
+      challengeNameEl.textContent = title;
+      challengeDescEl.textContent = desc;
+      challengeHintEl.textContent = gameMode === 'VS_AI' ? 'Esperando giro...' : 'Opcional';
+      challengeCardEl.classList.remove('highlight');
+    }
+
+    function updateChallengeCard(challenge) {
+      challengeIconEl.textContent = challenge.icon;
+      challengeNameEl.textContent = challenge.name;
+      challengeDescEl.textContent = challenge.description;
+      const count = countEligibleBlocks(challenge);
+      challengeHintEl.textContent = `${count} bloque${count === 1 ? '' : 's'} disponible${count === 1 ? '' : 's'}`;
+      challengeCardEl.classList.add('highlight');
+    }
+
+    function countEligibleBlocks(challenge) {
+      if (!challenge) return 0;
+      return blocks.filter(b => isBlockEligible(b, challenge)).length;
+    }
+
+    function isBlockEligible(b, challenge) {
+      if (!b || b.extracted || b.placedOnTop) return false;
+      // Cannot pull from active top unfinished level
+      if (b.initialLevel >= currentTopLevel - 1) return false;
+
+      if (gameMode === 'FREE') return true;
+      if (!challenge) return false;
+
+      // Check if any matching blocks exist in the tower
+      const matchingExists = blocks.some(item => 
+        !item.extracted && !item.placedOnTop && 
+        item.initialLevel < currentTopLevel - 1 &&
+        challenge.filter(item)
+      );
+
+      // If all blocks fitting this challenge were already removed, grant wildcard
+      if (!matchingExists) return true;
+
+      return challenge.filter(b);
+    }
+
+    function initTurnState() {
+      activeChallenge = null;
+      if (gameMode === 'VS_AI') {
+        currentTurn = 'PLAYER';
+        turnPhase = 'WAITING_SPIN';
+        turnBannerEl.className = 'turn-banner player-turn interactive';
+        turnTitleEl.textContent = 'Tu Turno';
+        turnDescEl.textContent = 'Gira la ruleta de desafíos para recibir tu objetivo.';
+        rouletteStatusBadge.textContent = 'Tu turno';
+        btnSpinWheel.disabled = false;
+        btnSpinWheel.classList.add('pulse-spin');
+        resetChallengeCard();
+      } else {
+        currentTurn = 'PLAYER';
+        turnPhase = 'AWAITING_PULL';
+        turnBannerEl.className = 'turn-banner player-turn interactive';
+        turnTitleEl.textContent = 'Modo Práctica Libre';
+        turnDescEl.textContent = 'Extrae cualquier bloque a tu propio ritmo.';
+        rouletteStatusBadge.textContent = 'Libre';
+        btnSpinWheel.disabled = false;
+        btnSpinWheel.classList.remove('pulse-spin');
+        resetChallengeCard('Modo Libre', 'Gira la ruleta si deseas un desafío opcional.');
+      }
+    }
+
+    function passTurnToPlayer() {
+      if (isGameOver) return;
+      currentTurn = 'PLAYER';
+      turnPhase = 'WAITING_SPIN';
+      activeChallenge = null;
+
+      turnBannerEl.className = 'turn-banner player-turn interactive';
+      turnTitleEl.textContent = 'Tu Turno';
+      turnDescEl.textContent = 'Gira la ruleta de desafíos para conocer tu próximo objetivo';
+      rouletteStatusBadge.textContent = 'Tu turno';
+
+      btnSpinWheel.disabled = false;
+      btnSpinWheel.classList.add('pulse-spin');
+
+      resetChallengeCard();
+      showGameToast('👤 ¡Es tu turno! Gira la ruleta.', true);
+    }
+
+    function drawRouletteWheel(rotation) {
+      if (!wheelCtx || !wheelCanvas) return;
+      const w = wheelCanvas.width;
+      const h = wheelCanvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const radius = cx - 12;
+      const numSectors = CHALLENGES.length;
+      const arc = (Math.PI * 2) / numSectors;
+
+      wheelCtx.clearRect(0, 0, w, h);
+
+      // Outer rim
+      wheelCtx.save();
+      wheelCtx.beginPath();
+      wheelCtx.arc(cx, cy, radius + 8, 0, Math.PI * 2);
+      wheelCtx.fillStyle = '#0f1115';
+      wheelCtx.fill();
+      wheelCtx.strokeStyle = '#2b303c';
+      wheelCtx.lineWidth = 4;
+      wheelCtx.stroke();
+      wheelCtx.restore();
+
+      // Sectors
+      for (let i = 0; i < numSectors; i++) {
+        const item = CHALLENGES[i];
+        const startAngle = rotation + i * arc;
+        const endAngle = startAngle + arc;
+
+        wheelCtx.save();
+        wheelCtx.beginPath();
+        wheelCtx.moveTo(cx, cy);
+        wheelCtx.arc(cx, cy, radius, startAngle, endAngle);
+        wheelCtx.closePath();
+
+        wheelCtx.fillStyle = item.color;
+        wheelCtx.fill();
+
+        wheelCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        wheelCtx.lineWidth = 2.5;
+        wheelCtx.stroke();
+
+        // Label and icon rotated
+        wheelCtx.save();
+        wheelCtx.translate(cx, cy);
+        wheelCtx.rotate(startAngle + arc / 2);
+
+        // Emoji
+        wheelCtx.font = '26px system-ui, -apple-system, sans-serif';
+        wheelCtx.textAlign = 'center';
+        wheelCtx.textBaseline = 'middle';
+        wheelCtx.fillText(item.icon, radius * 0.72, 0);
+
+        // Text
+        wheelCtx.fillStyle = item.textColor;
+        wheelCtx.font = 'bold 15px system-ui, -apple-system, sans-serif';
+        wheelCtx.fillText(item.short, radius * 0.38, 0);
+
+        wheelCtx.restore();
+        wheelCtx.restore();
+      }
+
+      // Center decorative hub
+      wheelCtx.save();
+      wheelCtx.beginPath();
+      wheelCtx.arc(cx, cy, 30, 0, Math.PI * 2);
+      wheelCtx.fillStyle = '#1e212b';
+      wheelCtx.fill();
+      wheelCtx.strokeStyle = '#d7aa76';
+      wheelCtx.lineWidth = 3;
+      wheelCtx.stroke();
+      wheelCtx.restore();
+    }
+
+    function getSectorIndexAtTop(rotation) {
+      const numSectors = CHALLENGES.length;
+      const arc = (Math.PI * 2) / numSectors;
+      // Top pointer is located at -Math.PI / 2 (or 1.5 * Math.PI)
+      let angle = (1.5 * Math.PI - (rotation % (Math.PI * 2))) % (Math.PI * 2);
+      if (angle < 0) angle += Math.PI * 2;
+      return Math.floor(angle / arc) % numSectors;
+    }
+
+    function spinRoulette(targetIndex, onComplete) {
+      if (isWheelSpinning) return;
+      isWheelSpinning = true;
+      btnSpinWheel.disabled = true;
+      btnSpinWheel.classList.remove('pulse-spin');
+
+      const numSectors = CHALLENGES.length;
+      const arc = (Math.PI * 2) / numSectors;
+      const fullTurns = 4 + Math.floor(Math.random() * 2); // 4 to 5 complete rotations
+
+      // If targetIndex is null, pick randomly among available challenges
+      if (targetIndex === null || targetIndex === undefined) {
+        const available = CHALLENGES.map((c, i) => ({ c, i })).filter(item => countEligibleBlocks(item.c) > 0);
+        if (available.length > 0) {
+          targetIndex = available[Math.floor(Math.random() * available.length)].i;
+        } else {
+          targetIndex = Math.floor(Math.random() * numSectors);
+        }
+      }
+
+      // Calculate target end angle so pointer at top points to middle of targetIndex sector
+      const desiredAngleAtTop = (1.5 * Math.PI - (targetIndex + 0.5) * arc);
+      const currentMod = wheelRotation % (Math.PI * 2);
+      let angleDiff = (desiredAngleAtTop - currentMod) % (Math.PI * 2);
+      if (angleDiff < 0) angleDiff += Math.PI * 2;
+
+      const startRot = wheelRotation;
+      const targetRot = wheelRotation + fullTurns * (Math.PI * 2) + angleDiff;
+      const duration = 2800; // ms
+      const startTime = performance.now();
+      let lastTickSector = getSectorIndexAtTop(startRot);
+
+      function animateSpin() {
+        const elapsed = performance.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 4); // Quartic ease-out
+
+        wheelRotation = startRot + (targetRot - startRot) * ease;
+        drawRouletteWheel(wheelRotation);
+
+        // Sound tick on sector crossing
+        const currentSector = getSectorIndexAtTop(wheelRotation);
+        if (currentSector !== lastTickSector) {
+          sound.playWheelTick();
+          lastTickSector = currentSector;
+        }
+
+        if (progress < 1) {
+          requestAnimationFrame(animateSpin);
+        } else {
+          isWheelSpinning = false;
+          wheelRotation = targetRot;
+          drawRouletteWheel(wheelRotation);
+          const finalSectorIdx = getSectorIndexAtTop(wheelRotation);
+          const selectedChallenge = CHALLENGES[finalSectorIdx];
+          sound.playWheelChime();
+
+          if (onComplete) {
+            onComplete(selectedChallenge);
+          }
+        }
+      }
+
+      animateSpin();
+    }
+
+    // ==========================================
+    // 7. AI PLAYER LOGIC & EXTRACTION
+    // ==========================================
+    function startAITurn() {
+      if (isGameOver || gameMode !== 'VS_AI') return;
+
+      currentTurn = 'AI';
+      turnPhase = 'AI_PLAYING';
+
+      turnBannerEl.className = 'turn-banner ai-turn interactive';
+      turnTitleEl.textContent = 'Turno de la IA';
+      turnDescEl.textContent = 'La IA está preparando su turno...';
+      rouletteStatusBadge.textContent = 'IA jugando';
+      btnSpinWheel.disabled = true;
+      btnSpinWheel.classList.remove('pulse-spin');
+
+      // AI delays briefly, then spins roulette
+      setTimeout(() => {
+        if (isGameOver) return;
+        turnDescEl.textContent = 'La IA hace girar la ruleta de desafíos...';
+
+        // Select challenge with available candidates
+        const availableChallenges = CHALLENGES.filter(c => countEligibleBlocks(c) > 0);
+        const chosenChallenge = availableChallenges.length > 0
+          ? availableChallenges[Math.floor(Math.random() * availableChallenges.length)]
+          : CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
+
+        const targetIdx = CHALLENGES.indexOf(chosenChallenge);
+
+        spinRoulette(targetIdx, (challenge) => {
+          if (isGameOver) return;
+          activeChallenge = challenge;
+          updateChallengeCard(challenge);
+
+          turnDescEl.textContent = `Desafío de la IA: ${challenge.name}. Analizando estabilidad de la torre...`;
+          showGameToast(`🤖 La IA debe retirar: ${challenge.name}`, true);
+
+          // AI analyzes tower stability and executes smooth extraction
+          setTimeout(() => {
+            if (isGameOver) return;
+            selectAndExtractAIBlock(challenge);
+          }, 1100);
+        });
+      }, 800);
+    }
+
+    function selectAndExtractAIBlock(challenge) {
+      if (isGameOver) return;
+
+      // 1. Filter eligible candidate blocks
+      let candidates = blocks.filter(b => isBlockEligible(b, challenge));
+      if (candidates.length === 0) {
+        candidates = blocks.filter(b => !b.extracted && !b.placedOnTop && b.initialLevel < currentTopLevel - 1);
+      }
+
+      if (candidates.length === 0) {
+        passTurnToPlayer();
+        return;
+      }
+
+      // 2. Score candidates by physical stability (lower score = safer)
+      const scored = candidates.map(b => {
+        let score = 0;
+
+        const sameLevelBlocks = blocks.filter(other => 
+          other.initialLevel === b.initialLevel && !other.extracted && !other.placedOnTop
+        );
+        const countOnLevel = sameLevelBlocks.length;
+
+        if (countOnLevel === 3) {
+          if (b.slotIndex === 1) {
+            score += 1; // Center block on full 3-block floor is safest
+          } else {
+            score += 3; // Side block on 3-block floor
+          }
+        } else if (countOnLevel === 2) {
+          const hasCenter = sameLevelBlocks.some(x => x.slotIndex === 1);
+          if (!hasCenter) {
+            score += 4; // Two sides left
+          } else {
+            score += 6; // Center and one side
+          }
+        } else {
+          score += 25; // Floor with single block left is critical!
+        }
+
+        // Lower floors carry higher overall weight
+        if (b.initialLevel < 4) {
+          score += 3.5;
+        } else if (b.initialLevel >= 12) {
+          score += 0.8;
+        }
+
+        // Slight jitter for realistic non-deterministic gameplay
+        score += Math.random() * 1.5;
+
+        return { block: b, score };
+      });
+
+      scored.sort((a, b) => a.score - b.score);
+
+      // Pick safest candidate (~75% safest, ~25% second safest if available)
+      let chosen = scored[0].block;
+      if (scored.length > 1 && Math.random() < 0.25) {
+        chosen = scored[1].block;
+      }
+
+      // 3. Smooth camera look-at
+      if (orbitControls) {
+        orbitControls.target.y = chosen.mesh.position.y;
+        orbitControls.update();
+      }
+
+      // 4. Highlight chosen block with distinctive AI cyan glow
+      chosen.mesh.material.emissive.setHex(0x00d2ff);
+      turnDescEl.textContent = `La IA extrae ${challenge.name} en el Piso ${chosen.initialLevel + 1}...`;
+
+      // 5. Execute smooth physical extraction
+      chosen.body.wakeUp();
+      wakeBlocksAround(chosen);
+
+      const pullDir = (Math.random() > 0.5 ? 1 : -1);
+      const pullSpeed = 1.7;
+      const isRotated90 = chosen.isRotated90;
+      const startTime = performance.now();
+      let pullFrames = 0;
+
+      function aiPullLoop() {
+        if (isGameOver) {
+          chosen.mesh.material.emissive.setHex(0x000000);
+          return;
+        }
+
+        pullFrames++;
+        const bBody = chosen.body;
+        bBody.wakeUp();
+
+        // Apply controlled physical velocity along block axis
+        if (isRotated90) {
+          bBody.velocity.x = pullDir * pullSpeed;
+          bBody.velocity.z *= 0.8;
+        } else {
+          bBody.velocity.z = pullDir * pullSpeed;
+          bBody.velocity.x *= 0.8;
+        }
+        bBody.velocity.y = Math.min(bBody.velocity.y, 0.05);
+
+        // Sound clicks
+        if (pullFrames % 14 === 0) {
+          sound.playWoodClick(0.35);
+        }
+
+        const distFromCenter = Math.sqrt(bBody.position.x ** 2 + bBody.position.z ** 2);
+        const elapsed = performance.now() - startTime;
+
+        if (distFromCenter < 2.25 && elapsed < 2800) {
+          requestAnimationFrame(aiPullLoop);
+        } else {
+          // Extracted successfully
+          chosen.extracted = true;
+          aiScore++;
+          aiScoreEl.textContent = aiScore.toString();
+          sound.playSuccess();
+          turnDescEl.textContent = '¡Bloque extraído por la IA! Colocando en la cima...';
+
+          setTimeout(() => {
+            if (isGameOver) return;
+            selectedBlock = chosen;
+            placeSelectedBlockOnTop();
+
+            setTimeout(() => {
+              if (!isGameOver) {
+                passTurnToPlayer();
+              }
+            }, 650);
+          }, 400);
+        }
+      }
+
+      aiPullLoop();
+    }
+
+    // ==========================================
+    // 8. INTERACTIVE DRAG & RAYCASTING (REAL PHYSICS WITH CANNON.JS)
+    // ==========================================
+    function getIntersectedBlock(event) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const meshes = blocks.map(b => b.mesh);
+      const intersects = raycaster.intersectObjects(meshes);
+
+      if (intersects.length > 0) {
+        const hitMesh = intersects[0].object;
+        const block = blocks.find(b => b.mesh === hitMesh);
+        return { block, point: intersects[0].point, face: intersects[0].face };
+      }
+      return null;
+    }
+
+    function onPointerMove(event) {
+      if (isGameOver) return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      // Si se está arrastrando una pieza con restricción física activa:
+      if (isMouseDown && draggedBlock && mouseConstraint) {
+        raycaster.setFromCamera(mouse, camera);
+        if (raycaster.ray.intersectPlane(dragPlane, dragPlaneIntersect)) {
+          // El cuerpo cinemático invisible sigue la posición del ratón en el plano 3D
+          mouseBody.position.set(dragPlaneIntersect.x, dragPlaneIntersect.y, dragPlaneIntersect.z);
+          draggedBlock.body.wakeUp();
+          wakeBlocksAround(draggedBlock);
+        }
+        return;
+      }
+
+      // Resaltado al pasar el ratón (Hover)
+      const hit = getIntersectedBlock(event);
+      if (hit && hit.block) {
+        if (hoveredBlock !== hit.block) {
+          if (hoveredBlock && hoveredBlock !== selectedBlock) {
+            hoveredBlock.mesh.material.emissive.setHex(0x000000);
+          }
+          hoveredBlock = hit.block;
+
+          const eligible = isBlockEligible(hoveredBlock, activeChallenge);
+
+          if (gameMode === 'VS_AI' && activeChallenge) {
+            if (eligible) {
+              hoveredBlock.mesh.material.emissive.setHex(0x166534); // Resplandor esmeralda
+              blockEligibilityBadge.textContent = '✓ Clic para sujetar y extraer';
+              blockEligibilityBadge.className = 'block-badge valid';
+              document.body.style.cursor = 'grab';
+            } else {
+              hoveredBlock.mesh.material.emissive.setHex(0x7f1d1d); // Resplandor rojo
+              blockEligibilityBadge.textContent = '✗ No cumple desafío';
+              blockEligibilityBadge.className = 'block-badge invalid';
+              document.body.style.cursor = 'not-allowed';
+            }
+          } else {
+            hoveredBlock.mesh.material.emissive.setHex(0x442c12); // Resplandor cálido
+            blockEligibilityBadge.textContent = hoveredBlock.initialLevel >= currentTopLevel - 1 ? 'Piso Superior' : '✓ Clic para sujetar y extraer';
+            blockEligibilityBadge.className = 'block-badge';
+            document.body.style.cursor = 'grab';
+          }
+
+          activeBlockInfoEl.style.display = 'block';
+          const posName = hoveredBlock.slotIndex === 0 ? 'Izquierdo' : hoveredBlock.slotIndex === 1 ? 'Central' : 'Derecho';
+          blockInfoTextEl.textContent = `Piso ${hoveredBlock.initialLevel + 1} (${posName})`;
+        }
+      } else {
+        if (hoveredBlock && hoveredBlock !== selectedBlock) {
+          hoveredBlock.mesh.material.emissive.setHex(0x000000);
+          hoveredBlock = null;
+          if (!isMouseDown) {
+            activeBlockInfoEl.style.display = 'none';
+          }
+          document.body.style.cursor = 'default';
+        }
+      }
+    }
+
+    function onPointerDown(event) {
+      if (isGameOver) return;
+      // Prevenir arrastrar varias piezas simultáneamente
+      if (isMouseDown || draggedBlock) return;
+
+      // Interacción con Clic Izquierdo (botón 0) o toque en pantalla táctil
+      if (event.button !== 0 && event.pointerType !== 'touch') return;
+
+      const hit = getIntersectedBlock(event);
+      if (hit && hit.block) {
+        // Validación en modo Jugador vs IA
+        if (gameMode === 'VS_AI') {
+          if (currentTurn !== 'PLAYER') {
+            showGameToast('⚠️ Es el turno de la IA. Espera a que finalice.');
+            return;
+          }
+          if (turnPhase === 'WAITING_SPIN') {
+            sound.playWarning();
+            showGameToast('⚠️ Primero debes girar la ruleta para conocer tu desafío.');
+            btnSpinWheel.classList.add('pulse-spin');
+            return;
+          }
+          if (!isBlockEligible(hit.block, activeChallenge)) {
+            sound.playWarning();
+            showGameToast(`⚠️ Bloque inválido. Tu objetivo actual es: ${activeChallenge.name}`);
+            return;
+          }
+        }
+
+        // 1. DESACTIVAR INMEDIATAMENTE ORBITCONTROLS PARA QUE LA CÁMARA NO GIRE AL ARRASTRAR
+        orbitControls.enabled = false;
+        isMouseDown = true;
+        draggedBlock = hit.block;
+        selectedBlock = hit.block;
+
+        // Impedir girar la ruleta mientras se arrastra una pieza
+        btnSpinWheel.disabled = true;
+
+        // Despertar el bloque y la torre adyacente para reaccionar físicamente
+        draggedBlock.body.wakeUp();
+        wakeBlocksAround(draggedBlock);
+        document.body.style.cursor = 'grabbing';
+
+        // 2. PLANO 3D PARALELO A LA CÁMARA QUE PASA POR EL PUNTO DE IMPACTO
+        const camDir = new THREE.Vector3();
+        camera.getWorldDirection(camDir);
+        const planeNormal = camDir.clone().negate().normalize();
+        dragPlane.setFromNormalAndCoplanarPoint(planeNormal, hit.point);
+
+        // Posicionar el cuerpo cinemático en el punto de contacto 3D
+        mouseBody.position.set(hit.point.x, hit.point.y, hit.point.z);
+        mouseBody.velocity.set(0, 0, 0);
+
+        // 3. RESTRICCIÓN FÍSICA CANNON.PointToPointConstraint
+        // Conecta el punto seleccionado del bloque con el cuerpo cinemático del ratón
+        const hitCannonPoint = new CANNON.Vec3(hit.point.x, hit.point.y, hit.point.z);
+        const localPivot = new CANNON.Vec3();
+        draggedBlock.body.pointToLocalFrame(hitCannonPoint, localPivot);
+
+        if (mouseConstraint) {
+          world.removeConstraint(mouseConstraint);
+          mouseConstraint = null;
+        }
+
+        // maxForce regulado (160 N): fuerza suficiente para extraer el bloque suavemente,
+        // pero previniendo que una aceleración brusca derribe instantáneamente la torre como una palanca rígida
+        mouseConstraint = new CANNON.PointToPointConstraint(
+          draggedBlock.body,
+          localPivot,
+          mouseBody,
+          new CANNON.Vec3(0, 0, 0),
+          160
+        );
+        world.addConstraint(mouseConstraint);
+
+        // Resplandor de selección visual
+        hit.block.mesh.material.emissive.setHex(0x603e18);
+
+        // Mostrar información del bloque en el HUD
+        activeBlockInfoEl.style.display = 'block';
+        const posName = hit.block.slotIndex === 0 ? 'Izquierdo' : hit.block.slotIndex === 1 ? 'Central' : 'Derecho';
+        blockInfoTextEl.textContent = `Piso ${hit.block.initialLevel + 1} (${posName})`;
+
+        sound.playWoodClick(0.8);
+      }
+    }
+
+    function onPointerUp() {
+      // 1. ELIMINAR LA RESTRICCIÓN FÍSICA DEL MUNDO
+      if (mouseConstraint) {
+        world.removeConstraint(mouseConstraint);
+        mouseConstraint = null;
+      }
+
+      // 2. REACTIVAR LOS CONTROLES DE CÁMARA (OrbitControls)
+      orbitControls.enabled = true;
+
+      // 3. EVALUAR SI LA EXTRACCIÓN FUE EXITOSA
+      if (draggedBlock) {
+        const block = draggedBlock;
+        draggedBlock = null;
+        isMouseDown = false;
+
+        if (block !== selectedBlock) {
+          block.mesh.material.emissive.setHex(0x000000);
+        }
+
+        const bBody = block.body;
+        const distFromCenter = Math.sqrt(bBody.position.x ** 2 + bBody.position.z ** 2);
+        const isFarOut = distFromCenter > 1.85; // Se alejó de la columna central de la torre
+        const isFallen = bBody.position.y < 0.45; // Cayó sobre la mesa
+
+        const wasSuccessfullyExtracted = (isFarOut || isFallen) && !block.extracted && !isGameOver;
+
+        if (wasSuccessfullyExtracted) {
+          block.extracted = true;
+          playerScore++;
+          playerScoreEl.textContent = playerScore.toString();
+          scoreCounterEl.textContent = (playerScore + aiScore).toString();
+          scoreCounterEl.classList.add('highlight');
+          sound.playSuccess();
+          showGameToast('✓ ¡Extracción exitosa!', true);
+
+          block.mesh.material.emissive.setHex(0x000000);
+          selectedBlock = block;
+
+          // Colocación fluida en la cima y avance de turno
+          setTimeout(() => {
+            if (!isGameOver) {
+              placeSelectedBlockOnTop();
+            }
+          }, 350);
+        } else if (!block.extracted) {
+          // Si no se extrajo completamente, advertir para que vuelva a jalarla
+          showGameToast('Pieza aún dentro de la torre. Vuelve a jalarla para completar la extracción.');
+          if (gameMode === 'VS_AI') {
+            btnSpinWheel.disabled = (turnPhase !== 'WAITING_SPIN');
+          } else {
+            btnSpinWheel.disabled = false;
+          }
+        }
+      } else {
+        isMouseDown = false;
+        if (gameMode === 'VS_AI') {
+          btnSpinWheel.disabled = (turnPhase !== 'WAITING_SPIN');
+        } else {
+          btnSpinWheel.disabled = false;
+        }
+      }
+
+      document.body.style.cursor = hoveredBlock ? 'grab' : 'default';
+    }
+
+    function showPlacePrompt(block) {
+      selectedBlock = block;
+      placePromptEl.classList.add('visible');
+    }
+
+    // ==========================================
+    // 9. PLACE BLOCK ON TOP OF TOWER
+    // ==========================================
+    function placeSelectedBlockOnTop() {
+      if (!selectedBlock || isGameOver) return;
+
+      const block = selectedBlock;
+      placePromptEl.classList.remove('visible');
+
+      // Nivel impar: 0 grados, Nivel par: 90 grados
+      const isRotated90 = ((currentTopLevel + 1) % 2 === 0);
+      const targetY = (BLOCK_H / 2) + currentTopLevel * LEVEL_HEIGHT;
+      const spacingGap = 0.02;
+      const offset = (currentTopSlot - 1) * (BLOCK_W + spacingGap);
+
+      let targetX = 0, targetZ = 0;
+      if (isRotated90) {
+        targetX = 0;
+        targetZ = offset;
+      } else {
+        targetX = offset;
+        targetZ = 0;
+      }
+
+      // Zero out physical velocity & damp momentum
+      block.body.velocity.set(0, 0, 0);
+      block.body.angularVelocity.set(0, 0, 0);
+
+      // Animate smoothly to hover over target spot then drop with gravity
+      const startPos = new THREE.Vector3().copy(block.mesh.position);
+      const hoverPos = new THREE.Vector3(targetX, targetY + 1.2, targetZ);
+      const startTime = performance.now();
+      const animDuration = 450;
+
+      // Deselect highlight
+      block.mesh.material.emissive.setHex(0x000000);
+
+      // Temporary kinematic during flight
+      block.body.type = CANNON.Body.KINEMATIC;
+
+      // Update orientation for the top layer
+      const targetQuat = new CANNON.Quaternion();
+      if (isRotated90) {
+        targetQuat.setFromAxisAngle(new CANNON.Vec3(0, 1, 0), Math.PI / 2);
+      } else {
+        targetQuat.set(0, 0, 0, 1);
+      }
+
+      function animatePlacement() {
+        const elapsed = performance.now() - startTime;
+        const progress = Math.min(elapsed / animDuration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3); // Ease out cubic
+
+        const curX = THREE.MathUtils.lerp(startPos.x, hoverPos.x, ease);
+        const curY = THREE.MathUtils.lerp(startPos.y, hoverPos.y, ease);
+        const curZ = THREE.MathUtils.lerp(startPos.z, hoverPos.z, ease);
+
+        block.body.position.set(curX, curY, curZ);
+        block.body.quaternion.copy(targetQuat);
+
+        if (progress < 1) {
+          requestAnimationFrame(animatePlacement);
+        } else {
+          // Release as dynamic body so physics naturally settles it
+          block.body.type = CANNON.Body.DYNAMIC;
+          block.body.position.set(targetX, targetY, targetZ);
+          block.body.velocity.set(0, -0.05, 0);
+          block.body.angularVelocity.set(0, 0, 0);
+          block.placedOnTop = true;
+          block.body.wakeUp();
+          wakeBlocksAround(block);
+
+          // Sound effect
+          sound.playWoodClick(1.0);
+
+          // Advance top level slots
+          currentTopSlot++;
+          if (currentTopSlot >= 3) {
+            currentTopSlot = 0;
+            currentTopLevel++;
+            levelCounterEl.textContent = currentTopLevel.toString();
+          }
+
+          selectedBlock = null;
+          activeBlockInfoEl.style.display = 'none';
+
+          // Turn Transition
+          if (!isGameOver) {
+            if (gameMode === 'VS_AI') {
+              if (currentTurn === 'PLAYER') {
+                turnPhase = 'AI_PLAYING';
+                turnDescEl.textContent = '¡Bloque colocado! Turno de la IA en breve...';
+                rouletteStatusBadge.textContent = 'IA jugando';
+                btnSpinWheel.disabled = true;
+                btnSpinWheel.classList.remove('pulse-spin');
+                setTimeout(startAITurn, 1100);
+              }
+            } else {
+              turnPhase = 'WAITING_SPIN';
+              btnSpinWheel.disabled = false;
+              btnSpinWheel.classList.add('pulse-spin');
+              turnDescEl.textContent = '¡Bloque colocado con éxito! Gira la ruleta para tu siguiente turno.';
+              showGameToast('✓ Extracción exitosa. Gira la ruleta para el siguiente turno.', true);
+            }
+          }
+        }
+      }
+
+      animatePlacement();
+    }
+
+    // ==========================================
+    // 10. COLLAPSE & GAME OVER DETECTION
+    // ==========================================
+    function checkTowerCollapse() {
+      if (isGameOver) return;
+
+      let fallenCount = 0;
+      let tiltedCount = 0;
+
+      for (let i = 0; i < blocks.length; i++) {
+        const b = blocks[i];
+        // If block has fallen onto or near table surface outside initial footprint
+        const distFromCenter = Math.sqrt(b.body.position.x ** 2 + b.body.position.z ** 2);
+        if (b.body.position.y < 0.35 && distFromCenter > 2.0) {
+          fallenCount++;
+        }
+
+        // Check severe block tilt (Y-axis tilt angle)
+        const upVec = new CANNON.Vec3(0, 1, 0);
+        const blockUp = b.body.quaternion.vmult(upVec);
+        const dot = blockUp.dot(upVec);
+        if (dot < 0.65 && !b.extracted) {
+          tiltedCount++;
+        }
+      }
+
+      // If 3 or more blocks have fallen onto table or tower has tilted drastically:
+      if (fallenCount >= 3 || tiltedCount >= 7) {
+        triggerGameOver();
+      }
+    }
+
+    function triggerGameOver() {
+      if (isGameOver) return;
+      isGameOver = true;
+
+      sound.playCollapse();
+      placePromptEl.classList.remove('visible');
+      btnSpinWheel.disabled = true;
+      btnSpinWheel.classList.remove('pulse-spin');
+
+      // Determine Winner based on mode and turn
+      if (gameMode === 'VS_AI') {
+        if (currentTurn === 'PLAYER') {
+          // Tower collapsed during player's turn -> AI wins!
+          modalWinnerIcon.textContent = '🤖';
+          modalWinnerTitle.textContent = '¡Gana la Máquina!';
+          modalWinnerDesc.textContent = 'La torre se derrumbó durante tu turno de extracción. ¡Punto y victoria para la Inteligencia Artificial!';
+        } else {
+          // Tower collapsed during AI's turn -> Player wins!
+          modalWinnerIcon.textContent = '🏆';
+          modalWinnerTitle.textContent = '¡Felicidades, Ganaste!';
+          modalWinnerDesc.textContent = '¡La IA desestabilizó la torre durante su turno y provocó el colapso! ¡Gran victoria del jugador humano!';
+        }
+      } else {
+        modalWinnerIcon.textContent = '💥';
+        modalWinnerTitle.textContent = '¡La Torre ha Colapsado!';
+        modalWinnerDesc.textContent = 'Los cimientos no resistieron el desbalance y la estructura se vino abajo.';
+      }
+
+      modalPlayerScore.textContent = playerScore.toString();
+      modalAiScore.textContent = aiScore.toString();
+      finalLevelsEl.textContent = currentTopLevel.toString();
+      finalTotalScore.textContent = (playerScore + aiScore).toString();
+
+      setTimeout(() => {
+        collapseModal.classList.add('active');
+      }, 750);
+    }
+
+    // ==========================================
+    // 11. ANIMATION LOOP & EVENT LISTENERS
+    // ==========================================
+    const fixedTimeStep = 1.0 / 60.0;
+    let lastTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const time = performance.now();
+      let dt = (time - lastTime) / 1000;
+      lastTime = time;
+      if (dt > 0.1) dt = 0.1; // clamp lag spikes
+
+      // Step physics
+      world.step(fixedTimeStep, dt, 3);
+
+      // Synchronize Three.js meshes with Cannon physics bodies
+      for (let i = 0; i < blocks.length; i++) {
+        const b = blocks[i];
+        b.mesh.position.copy(b.body.position);
+        b.mesh.quaternion.copy(b.body.quaternion);
+      }
+
+      // Check collapse every few frames
+      checkTowerCollapse();
+
+      orbitControls.update();
+      renderer.render(scene, camera);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Desactivar menú contextual del navegador para permitir arrastre fluido con clic derecho
+    window.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+    });
+
+    // Setup User Controls
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+
+    btnSpinWheel.addEventListener('click', () => {
+      if (isGameOver || isWheelSpinning || isMouseDown || draggedBlock) return;
+      if (gameMode === 'VS_AI' && currentTurn !== 'PLAYER') {
+        showGameToast('⚠️ Es el turno de la IA, espera a que termine.');
+        return;
+      }
+      if (gameMode === 'VS_AI' && turnPhase !== 'WAITING_SPIN') {
+        showGameToast('⚠️ Ya tienes un desafío activo. Extrae tu bloque.');
+        return;
+      }
+
+      turnPhase = 'SPINNING';
+      rouletteStatusBadge.textContent = 'Girando...';
+      turnDescEl.textContent = 'Girando la ruleta de desafíos... ¡Suerte!';
+
+      spinRoulette(null, (challenge) => {
+        activeChallenge = challenge;
+        updateChallengeCard(challenge);
+
+        if (gameMode === 'VS_AI') {
+          turnPhase = 'AWAITING_PULL';
+          rouletteStatusBadge.textContent = 'Tu turno';
+          turnDescEl.textContent = `🎯 Objetivo: ${challenge.name}. Extrae cuidadosamente un bloque que cumpla la regla.`;
+          showGameToast(`🎯 ¡Desafío: ${challenge.name}!`, true);
+        } else {
+          showGameToast(`🎯 Desafío opcional: ${challenge.name}!`, true);
+        }
+      });
+    });
+
+    btnModeVs.addEventListener('click', () => {
+      if (gameMode === 'VS_AI') return;
+      gameMode = 'VS_AI';
+      btnModeVs.classList.add('active');
+      btnModeFree.classList.remove('active');
+      buildTower();
+      showGameToast('Modo Jugador vs. Máquina activado', true);
+    });
+
+    btnModeFree.addEventListener('click', () => {
+      if (gameMode === 'FREE') return;
+      gameMode = 'FREE';
+      btnModeFree.classList.add('active');
+      btnModeVs.classList.remove('active');
+      buildTower();
+      showGameToast('Modo Libre activado');
+    });
+
+    btnPlaceTop.addEventListener('click', placeSelectedBlockOnTop);
+    btnRestart.addEventListener('click', buildTower);
+    btnModalRestart.addEventListener('click', buildTower);
+    btnCamera.addEventListener('click', resetCameraView);
+
+    btnAudio.addEventListener('click', () => {
+      sound.muted = !sound.muted;
+      if (sound.muted) {
+        iconSoundOn.style.display = 'none';
+        iconSoundOff.style.display = 'block';
+      } else {
+        iconSoundOn.style.display = 'block';
+        iconSoundOff.style.display = 'none';
+        sound.playWoodClick(1.0);
+      }
+    });
+
+    // Spacebar to place on top
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && placePromptEl.classList.contains('visible')) {
+        e.preventDefault();
+        placeSelectedBlockOnTop();
+      }
+      if (e.code === 'KeyR') {
+        buildTower();
+      }
+    });
+
+    // START GAME
+    initPhysics();
+    initGraphics();
+    buildTower();
+    animate();
+  </script>
+</body>
+</html>

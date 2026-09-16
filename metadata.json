@@ -1,0 +1,6 @@
+{
+  "name": "Jenga 3D",
+  "description": "Juego interactivo de Jenga en 3D con físicas realistas, modo Jugador vs. Máquina (IA) y Ruleta de Desafíos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
